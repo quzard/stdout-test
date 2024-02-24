@@ -1,23 +1,39 @@
 package main
 
 import (
+	"bufio"
 	"fmt"
 	"io"
 	"log"
 	"net/http"
 	"os"
+	"strconv"
+	"strings"
+	"sync"
+)
+
+var (
+	file *os.File
+	err  error
+	mu   sync.Mutex
 )
 
 func appendToFile(filename string, data []byte) {
-	file, err := os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
-	if err != nil {
-		log.Fatal(err)
-	}
-	defer file.Close()
+	mu.Lock()
+	defer mu.Unlock()
 
-	if _, err := file.Write(data); err != nil {
+	if file == nil {
+		file, err = os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+		if err != nil {
+			log.Fatal(err)
+		}
+	}
+
+	writer := bufio.NewWriter(file)
+	if _, err := writer.Write(data); err != nil {
 		log.Fatal(err)
 	}
+	writer.Flush()
 }
 
 func echoHandler(w http.ResponseWriter, r *http.Request) {
@@ -28,13 +44,30 @@ func echoHandler(w http.ResponseWriter, r *http.Request) {
 	}
 	defer r.Body.Close()
 
-	data := append(body, '\n')
+	s := string(body)
+	parts := strings.SplitN(s, ",", 2)
 
-	fmt.Println(string(data))
+	if len(parts) < 2 {
+		fmt.Println("Invalid data format")
+		return
+	}
 
-	appendToFile("output.txt", data)
+	num, err := strconv.Atoi(parts[0])
+	if err != nil {
+		fmt.Println("Invalid number format:", parts[0])
+		return
+	}
 
-	fmt.Fprintf(w, "%s", data)
+	log := parts[1]
+
+	go func() {
+		for i := 0; i < num; i++ {
+			fmt.Println(log)
+			appendToFile("output.txt", []byte(log+"\n"))
+		}
+	}()
+
+	// fmt.Fprintf(w, "%s", data)
 }
 
 func main() {
@@ -44,4 +77,14 @@ func main() {
 	if err := http.ListenAndServe(":8000", nil); err != nil {
 		fmt.Println(err)
 	}
+}
+
+func cleanup() {
+	if file != nil {
+		file.Close()
+	}
+}
+
+func init() {
+	defer cleanup()
 }

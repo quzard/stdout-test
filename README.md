@@ -41,17 +41,15 @@ go run server.go
 要构建Docker镜像，导航到项目目录并运行：
 
 ```sh
-docker build -t <你的镜像名称> .
+docker build -t echo-server --no-cache .
 ```
-
-这将创建一个带有标签`<你的镜像名称>`的Docker镜像。
 
 ### 运行Docker镜像
 
 要运行Docker镜像，使用以下命令：
 
 ```sh
-docker run -p 8000:8000 <你的镜像名称>
+docker run -d -p 8000:8000 --name echo-server quzard/echo-server
 ```
 
 这将启动应用程序并在8000端口上公开它。
