@@ -60,6 +60,11 @@ docker build -t quzard/echo-server --no-cache .
 
 ```sh
 docker run -d -p 8000:8000 --name echo-server \
+    -e LOG_DIR=/logs \
+    -e LOG_MAX_SIZE=10 \
+    -e LOG_MAX_BACKUPS=5 \
+    -e LOG_MAX_AGE=28 \
+    -e LOG_COMPRESS=false \
     -v ./logs:/logs \
     quzard/echo-server
 ```
