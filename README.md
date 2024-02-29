@@ -53,3 +53,20 @@ docker run -d -p 8000:8000 --name echo-server quzard/echo-server
 ```
 
 这将启动应用程序并在8000端口上公开它。
+
+## 使用
+
+```bash
+#!/bin/bash
+if [ -z "$1" ]; then
+    echo "Usage: $0 <message>"
+    exit 1
+fi
+
+postData=$(printf '%s,Exception in thread "main" java.lang.NullPointerException\n     at com.example.myproject.Book.getTitle\n     at com.example.myproject.Book.getTitle\n     at com.example.myproject.Book.getTitle\n    ...23 more' "$1")
+
+curl -X POST \
+     -d "$postData" \
+     -H "Content-Type: text/plain" \
+     http://127.0.0.1:8000
+```
