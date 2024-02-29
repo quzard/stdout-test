@@ -4,6 +4,9 @@ FROM golang:1.18 as builder
 # 设置工作目录
 WORKDIR /app
 
+# 设置Go mod代理
+ENV GOPROXY=https://goproxy.io,direct
+
 # 复制源代码
 COPY . .
 

@@ -2,13 +2,23 @@
 
 ## 简介
 
-这是一个简单的Go服务器，它在8000端口监听并将请求体回显给客户端。它还将请求体附加到名为`output.txt`的文件。
+这是一个简单的Go服务器，它在8000端口监听并将请求体回显给客户端。它还将请求体附加到文件。
 
 ## 开始使用
 
 ### 先决条件
 
 - Go 1.x
+
+### 环境变量配置
+
+这个应用程序使用以下环境变量来配置日志文件的行为：
+
+- `LOG_DIR`: 日志文件的目录。默认值是`/logs`。
+- `LOG_MAX_SIZE`: 日志文件的最大大小（以兆字节为单位）。默认值是10。
+- `LOG_MAX_BACKUPS`: 保留的最大备份日志文件数量。默认值是5。
+- `LOG_MAX_AGE`: 日志文件的最大存活时间（以天为单位）。默认值是28。
+- `LOG_COMPRESS`: 是否压缩旧的日志文件。默认值是`false`。
 
 ### 安装
 
@@ -49,7 +59,14 @@ docker build -t echo-server --no-cache .
 要运行Docker镜像，使用以下命令：
 
 ```sh
-docker run -d -p 8000:8000 --name echo-server quzard/echo-server
+docker run -d -p 8000:8000 --name echo-server \
+    -e LOG_DIR=/logs \
+    -e LOG_MAX_SIZE=10 \
+    -e LOG_MAX_BACKUPS=5 \
+    -e LOG_MAX_AGE=28 \
+    -e LOG_COMPRESS=false \
+    -v /path/to/host/logs:/logs \
+    quzard/echo-server
 ```
 
 这将启动应用程序并在8000端口上公开它。

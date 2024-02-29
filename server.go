@@ -1,39 +1,67 @@
 package main
 
 import (
-	"bufio"
 	"fmt"
 	"io"
-	"log"
 	"net/http"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
+
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
 var (
-	file *os.File
-	err  error
-	mu   sync.Mutex
+	logger *lumberjack.Logger
+	mu     sync.Mutex
 )
 
 func appendToFile(filename string, data []byte) {
 	mu.Lock()
 	defer mu.Unlock()
 
-	if file == nil {
-		file, err = os.OpenFile(filename, os.O_APPEND|os.O_CREATE|os.O_WRONLY, 0644)
+	if logger == nil {
+		logDir := os.Getenv("LOG_DIR")
+		if logDir == "" {
+			logDir = "/logs"
+		}
+		if _, err := os.Stat(logDir); os.IsNotExist(err) {
+			os.Mkdir(logDir, 0755)
+		}
+
+		maxSizeStr := os.Getenv("LOG_MAX_SIZE")
+		maxSize, err := strconv.Atoi(maxSizeStr)
 		if err != nil {
-			log.Fatal(err)
+			maxSize = 10 // default value
+		}
+
+		maxBackupsStr := os.Getenv("LOG_MAX_BACKUPS")
+		maxBackups, err := strconv.Atoi(maxBackupsStr)
+		if err != nil {
+			maxBackups = 5 // default value
+		}
+
+		maxAgeStr := os.Getenv("LOG_MAX_AGE")
+		maxAge, err := strconv.Atoi(maxAgeStr)
+		if err != nil {
+			maxAge = 28 // default value
+		}
+
+		compressStr := os.Getenv("LOG_COMPRESS")
+		compress := compressStr == "true" || compressStr == "1"
+
+		logger = &lumberjack.Logger{
+			Filename:   filepath.Join(logDir, filename),
+			MaxSize:    maxSize, // megabytes
+			MaxBackups: maxBackups,
+			MaxAge:     maxAge,   //days
+			Compress:   compress, // disabled by default
 		}
 	}
 
-	writer := bufio.NewWriter(file)
-	if _, err := writer.Write(data); err != nil {
-		log.Fatal(err)
-	}
-	writer.Flush()
+	logger.Write(data)
 }
 
 func echoHandler(w http.ResponseWriter, r *http.Request) {
@@ -61,10 +89,21 @@ func echoHandler(w http.ResponseWriter, r *http.Request) {
 	log := parts[1]
 
 	go func() {
-		for i := 0; i < num; i++ {
-			fmt.Println(log)
-			appendToFile("output.txt", []byte(log+"\n"))
-		}
+		var wg sync.WaitGroup
+		wg.Add(2)
+		go func() {
+			defer wg.Done()
+			for i := 0; i < num; i++ {
+				fmt.Println(log)
+			}
+		}()
+		go func() {
+			defer wg.Done()
+			for i := 0; i < num; i++ {
+				appendToFile("output.txt", []byte(log+"\n"))
+			}
+		}()
+		wg.Wait()
 	}()
 
 	// fmt.Fprintf(w, "%s", data)
@@ -80,8 +119,8 @@ func main() {
 }
 
 func cleanup() {
-	if file != nil {
-		file.Close()
+	if logger != nil {
+		logger.Close()
 	}
 }
 
