@@ -51,7 +51,7 @@ go run server.go
 要构建Docker镜像，导航到项目目录并运行：
 
 ```sh
-docker build -t echo-server --no-cache .
+docker build -t quzard/echo-server --no-cache .
 ```
 
 ### 运行Docker镜像
@@ -60,12 +60,7 @@ docker build -t echo-server --no-cache .
 
 ```sh
 docker run -d -p 8000:8000 --name echo-server \
-    -e LOG_DIR=/logs \
-    -e LOG_MAX_SIZE=10 \
-    -e LOG_MAX_BACKUPS=5 \
-    -e LOG_MAX_AGE=28 \
-    -e LOG_COMPRESS=false \
-    -v /path/to/host/logs:/logs \
+    -v ./logs:/logs \
     quzard/echo-server
 ```
 
