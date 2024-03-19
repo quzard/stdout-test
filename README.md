@@ -80,7 +80,7 @@ if [ -z "$1" ]; then
     exit 1
 fi
 
-postData=$(printf '%s,Exception in thread "main" java.lang.NullPointerException\n     at com.example.myproject.Book.getTitle\n     at com.example.myproject.Book.getTitle\n     at com.example.myproject.Book.getTitle\n    ...23 more' "$1")
+postData=$(printf '%s,%s,Exception in thread "main" java.lang.NullPointerException\n     at com.example.myproject.Book.getTitle\n     at com.example.myproject.Book.getTitle\n     at com.example.myproject.Book.getTitle\n    ...23 more' "$1" "$2")
 
 curl -X POST \
      -d "$postData" \

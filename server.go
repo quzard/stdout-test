@@ -73,9 +73,9 @@ func echoHandler(w http.ResponseWriter, r *http.Request) {
 	defer r.Body.Close()
 
 	s := string(body)
-	parts := strings.SplitN(s, ",", 2)
+	parts := strings.SplitN(s, ",", 3)
 
-	if len(parts) < 2 {
+	if len(parts) < 3 {
 		fmt.Println("Invalid data format")
 		return
 	}
@@ -86,26 +86,48 @@ func echoHandler(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 
-	log := parts[1]
+	thread, err := strconv.Atoi(parts[1])
+	if err != nil {
+		fmt.Println("Invalid number format:", parts[0])
+		return
+	}
+
+	log := parts[2]
 
 	go func() {
 		var wg sync.WaitGroup
-		wg.Add(2)
+		for j := 0; j < thread-1; j++ {
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for i := 0; i < num/thread; i++ {
+					fmt.Println(log)
+				}
+			}()
+			wg.Add(1)
+			go func() {
+				defer wg.Done()
+				for i := 0; i < num/thread; i++ {
+					appendToFile("output.txt", []byte(log+"\n"))
+				}
+			}()
+		}
+		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for i := 0; i < num; i++ {
+			for i := 0; i < num-num/thread*(thread-1); i++ {
 				fmt.Println(log)
 			}
 		}()
+		wg.Add(1)
 		go func() {
 			defer wg.Done()
-			for i := 0; i < num; i++ {
+			for i := 0; i < num-num/thread*(thread-1); i++ {
 				appendToFile("output.txt", []byte(log+"\n"))
 			}
 		}()
 		wg.Wait()
 	}()
-
 	// fmt.Fprintf(w, "%s", data)
 }
 
