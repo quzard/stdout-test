@@ -84,7 +84,7 @@ func appendToFile(filename string, data []byte) {
 	loggerMu.Unlock()
 }
 
-func echoHandler(thread int, log string, minute int) {
+func echoHandler(log string, minute int) {
 	var wg sync.WaitGroup
 	var processWg sync.WaitGroup
 	timer := time.NewTimer(time.Duration(minute) * time.Minute)
@@ -97,44 +97,49 @@ func echoHandler(thread int, log string, minute int) {
 	var stdoutLogCount int64 = 0
 	var fileLogCount int64 = 0
 
-	logChannel1 := make(chan string, 10000*thread)
+	logChannel1 := make(chan string, 10000)
 	processWg.Add(1)
 	go func() {
 		defer processWg.Done()
+		shouldPrint := os.Getenv("SHOULD_PRINT")
 		cnt := 0
 		for log := range logChannel1 {
 			cnt++
-			fmt.Println("cnt:", cnt, ",", log)
-			atomic.AddInt64(&stdoutLogCount, 1)
+			if shouldPrint == "on" {
+				fmt.Println("cnt:", cnt, ",", log)
+				atomic.AddInt64(&stdoutLogCount, 1)
+			}
 		}
 	}()
 
-	logChannel2 := make(chan string, 10000*thread)
+	logChannel2 := make(chan string, 10000)
 	processWg.Add(1)
 	go func() {
 		defer processWg.Done()
+		shouldAppendToFile := os.Getenv("SHOULD_APPEND_TO_FILE")
+
 		cnt := 0
 		for log := range logChannel2 {
 			cnt++
-			appendToFile("output.txt", []byte(fmt.Sprintf("cnt:%d,%s\n", cnt, log)))
-			atomic.AddInt64(&fileLogCount, 1)
+			if shouldAppendToFile == "on" {
+				appendToFile("output.txt", []byte(fmt.Sprintf("cnt:%d,%s\n", cnt, log)))
+				atomic.AddInt64(&fileLogCount, 1)
+			}
 		}
 	}()
-	for j := 0; j < thread; j++ {
-		wg.Add(1)
-		go func(threadNo int) {
-			defer wg.Done()
-			for {
-				select {
-				case <-quit:
-					return
-				default:
-					logChannel1 <- fmt.Sprintf("thread:%d,log:%s", threadNo, log)
-					logChannel2 <- fmt.Sprintf("thread:%d,log:%s", threadNo, log)
-				}
+	wg.Add(1)
+	go func() {
+		defer wg.Done()
+		for {
+			select {
+			case <-quit:
+				return
+			default:
+				logChannel1 <- fmt.Sprintf("log:%s", log)
+				logChannel2 <- fmt.Sprintf("log:%s", log)
 			}
-		}(j)
-	}
+		}
+	}()
 	wg.Wait()
 
 	close(logChannel1)
@@ -148,11 +153,10 @@ func echoHandler(thread int, log string, minute int) {
 
 func main() {
 	minute := getEnvAsInt("MINUTE", 10)
-	thread := getEnvAsInt("THREAD", 5)
 	log := strings.ReplaceAll(os.Getenv("LOG"), "\\n", "\n")
 
 	writeRateMB := getEnvAsInt("LOG_WRITE_RATE_MB", defaultWriteRateMB)
 	rateLimiter = rate.NewLimiter(rate.Limit(writeRateMB*1024*1024), defaultWriteBurst)
 
-	echoHandler(thread, log, minute)
+	echoHandler(log, minute)
 }
