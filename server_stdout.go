@@ -46,7 +46,6 @@ func echoHandler(log string, minute int) {
 		shouldPrint := os.Getenv("SHOULD_PRINT")
 		cnt := 0
 		for log := range logChannel {
-			cnt++
 
 			r := rateLimiter.ReserveN(time.Now(), len(log))
 
@@ -54,8 +53,8 @@ func echoHandler(log string, minute int) {
 				continue
 			}
 			time.Sleep(r.Delay())
-
 			if shouldPrint == "on" {
+				cnt++
 				fmt.Println("cnt:", cnt, ",", log)
 				atomic.AddInt64(&stdoutLogCount, 1)
 			}
