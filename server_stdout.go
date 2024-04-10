@@ -7,6 +7,7 @@ import (
 	"strconv"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 
 	"golang.org/x/time/rate"
@@ -85,44 +86,64 @@ func appendToFile(filename string, data []byte) {
 
 func echoHandler(thread int, log string, minute int) {
 	var wg sync.WaitGroup
-	// Create a timer that will send a signal after 'minute' minutes
+	var processWg sync.WaitGroup
 	timer := time.NewTimer(time.Duration(minute) * time.Minute)
-	// Create a quit channel that will be closed when the timer fires
 	quit := make(chan struct{})
 
 	go func() {
 		<-timer.C
 		close(quit)
 	}()
+	var stdoutLogCount int64 = 0
+	var fileLogCount int64 = 0
 
-	logChannel1 := make(chan string, 10000*thread) // 创建一个带缓冲的 channel
+	logChannel1 := make(chan string, 10000*thread)
+	processWg.Add(1)
 	go func() {
+		defer processWg.Done()
+		cnt := 0
 		for log := range logChannel1 {
-			fmt.Println(log)
+			cnt++
+			fmt.Println("cnt:", cnt, ",", log)
+			atomic.AddInt64(&stdoutLogCount, 1)
 		}
 	}()
-	logChannel2 := make(chan string, 10000*thread) // 创建一个带缓冲的 channel
+
+	logChannel2 := make(chan string, 10000*thread)
+	processWg.Add(1)
 	go func() {
+		defer processWg.Done()
+		cnt := 0
 		for log := range logChannel2 {
-			appendToFile("output.txt", []byte(log+"\n"))
+			cnt++
+			appendToFile("output.txt", []byte(fmt.Sprintf("cnt:%d,%s\n", cnt, log)))
+			atomic.AddInt64(&fileLogCount, 1)
 		}
 	}()
 	for j := 0; j < thread; j++ {
 		wg.Add(1)
-		go func() {
+		go func(threadNo int) {
 			defer wg.Done()
 			for {
 				select {
 				case <-quit:
 					return
 				default:
-					logChannel1 <- log
-					logChannel2 <- log
+					logChannel1 <- fmt.Sprintf("thread:%d,log:%s", threadNo, log)
+					logChannel2 <- fmt.Sprintf("thread:%d,log:%s", threadNo, log)
 				}
 			}
-		}()
+		}(j)
 	}
 	wg.Wait()
+
+	close(logChannel1)
+	close(logChannel2)
+
+	processWg.Wait()
+	atomic.AddInt64(&stdoutLogCount, 2)
+	fmt.Println("Total stdoutLogCount:", atomic.LoadInt64(&stdoutLogCount))
+	fmt.Println("Total fileLogCount:", atomic.LoadInt64(&fileLogCount))
 }
 
 func main() {
