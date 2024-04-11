@@ -3,6 +3,7 @@ package main
 import (
 	"fmt"
 	"os"
+	"path/filepath"
 	"strconv"
 	"strings"
 	"sync"
@@ -10,11 +11,24 @@ import (
 	"time"
 
 	"golang.org/x/time/rate"
+	"gopkg.in/natefinch/lumberjack.v2"
 )
 
+var once sync.Once
+
 var (
-	rateLimiter        *rate.Limiter
-	defaultWriteRateMB = 300   // MB/s
+	logger        *lumberjack.Logger
+	loggerMu      sync.Mutex
+	rateLimiter   *rate.Limiter
+	rateLimiterMu sync.Mutex
+)
+
+const (
+	defaultLogDir      = "/logs"
+	defaultMaxSize     = 10240 // MB
+	defaultMaxBackups  = 10
+	defaultMaxAge      = 1     // Days
+	defaultWriteRateMB = 500   // MB/s
 	defaultWriteBurst  = 10000 // Burst size in bytes
 )
 
@@ -24,6 +38,50 @@ func getEnvAsInt(name string, defaultValue int) int {
 		return value
 	}
 	return defaultValue
+}
+
+func initLogger(filename string) {
+	if logger == nil {
+		logDir := os.Getenv("LOG_DIR")
+		if logDir == "" {
+			logDir = defaultLogDir
+		}
+		if _, err := os.Stat(logDir); os.IsNotExist(err) {
+			os.Mkdir(logDir, 0755)
+		}
+		maxSize := getEnvAsInt("LOG_MAX_SIZE", defaultMaxSize)
+		maxBackups := getEnvAsInt("LOG_MAX_BACKUPS", defaultMaxBackups)
+		maxAge := getEnvAsInt("LOG_MAX_AGE", defaultMaxAge)
+
+		logger = &lumberjack.Logger{
+			Filename:   filepath.Join(logDir, filename),
+			MaxSize:    maxSize, // megabytes
+			MaxBackups: maxBackups,
+			MaxAge:     maxAge, //days
+			Compress:   false,  // disabled by default
+		}
+	}
+}
+
+func appendToFile(filename string, data []byte) {
+	if logger == nil {
+		once.Do(func() {
+			initLogger(filename)
+		})
+	}
+
+	rateLimiterMu.Lock()
+	r := rateLimiter.ReserveN(time.Now(), len(data))
+	rateLimiterMu.Unlock()
+
+	if !r.OK() {
+		return // Not allowed to write due to rate limiting
+	}
+	time.Sleep(r.Delay())
+
+	loggerMu.Lock()
+	logger.Write(data)
+	loggerMu.Unlock()
 }
 
 func echoHandler(thread int, log string, minute int) {
@@ -39,13 +97,15 @@ func echoHandler(thread int, log string, minute int) {
 	}
 
 	var stdoutLogCount int64 = 0
-	logChannel := make(chan string, 10000*thread)
+	var fileLogCount int64 = 0
+
+	logChannel1 := make(chan string, 10000*thread)
 	processWg.Add(1)
 	go func() {
 		defer processWg.Done()
 		shouldPrint := os.Getenv("SHOULD_PRINT")
 		cnt := 0
-		for log := range logChannel {
+		for log := range logChannel1 {
 			r := rateLimiter.ReserveN(time.Now(), len(log))
 			if !r.OK() {
 				continue
@@ -59,27 +119,52 @@ func echoHandler(thread int, log string, minute int) {
 		}
 	}()
 
+	logChannel2 := make(chan string, 10000)
+	processWg.Add(1)
+	go func() {
+		defer processWg.Done()
+		shouldAppendToFile := os.Getenv("SHOULD_APPEND_TO_FILE")
+		cnt := 0
+		for log := range logChannel2 {
+			if shouldAppendToFile == "on" {
+				cnt++
+				appendToFile("output.txt", []byte(fmt.Sprintf("cnt:%d,%s\n", cnt, log)))
+				atomic.AddInt64(&fileLogCount, 1)
+			}
+		}
+	}()
+	printDirectly := os.Getenv("PRINT_DIRECTLY")
 	for j := 0; j < thread; j++ {
+
 		wg.Add(1)
 		go func(threadNo int) {
 			defer wg.Done()
+			var cnt int64 = 0
 			for {
 				select {
 				case <-quit:
 					return
 				default:
-					logChannel <- fmt.Sprintf("thread:%d,log:%s", threadNo, log)
+					if printDirectly == "on" {
+						cnt++
+						fmt.Printf("cnt:%d thread:%d,log:%s\n", cnt, threadNo, log)
+					} else {
+						logChannel1 <- fmt.Sprintf("thread:%d,log:%s", threadNo, log)
+						logChannel2 <- fmt.Sprintf("thread:%d,log:%s", threadNo, log)
+					}
 				}
 			}
 		}(j)
 	}
 	wg.Wait()
 
-	close(logChannel)
+	close(logChannel1)
+	close(logChannel2)
 
 	processWg.Wait()
-	atomic.AddInt64(&stdoutLogCount, 1)
+	atomic.AddInt64(&stdoutLogCount, 2)
 	fmt.Println("cnt:Total stdoutLogCount:", atomic.LoadInt64(&stdoutLogCount))
+	fmt.Println("cnt:Total fileLogCount:", atomic.LoadInt64(&fileLogCount))
 }
 
 func main() {
