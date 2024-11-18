@@ -14,9 +14,8 @@ import (
 	"gopkg.in/natefinch/lumberjack.v2"
 )
 
-var once sync.Once
-
 var (
+	once          sync.Once
 	logger        *lumberjack.Logger
 	loggerMu      sync.Mutex
 	rateLimiter   *rate.Limiter
@@ -41,7 +40,7 @@ func getEnvAsInt(name string, defaultValue int) int {
 }
 
 func initLogger(filename string) {
-	if logger == nil {
+	once.Do(func() {
 		logDir := os.Getenv("LOG_DIR")
 		if logDir == "" {
 			logDir = defaultLogDir
@@ -60,15 +59,11 @@ func initLogger(filename string) {
 			MaxAge:     maxAge, //days
 			Compress:   false,  // disabled by default
 		}
-	}
+	})
 }
 
 func appendToFile(filename string, data []byte) {
-	if logger == nil {
-		once.Do(func() {
-			initLogger(filename)
-		})
-	}
+	initLogger(filename)
 
 	rateLimiterMu.Lock()
 	r := rateLimiter.ReserveN(time.Now(), len(data))
@@ -104,7 +99,6 @@ func echoHandler(thread int, log string, minute int) {
 	go func() {
 		defer processWg.Done()
 		shouldPrint := os.Getenv("SHOULD_PRINT")
-		cnt := 0
 		for log := range logChannel1 {
 			r := rateLimiter.ReserveN(time.Now(), len(log))
 			if !r.OK() {
@@ -112,30 +106,26 @@ func echoHandler(thread int, log string, minute int) {
 			}
 			time.Sleep(r.Delay())
 			if shouldPrint == "on" {
-				cnt++
-				fmt.Println("cnt:", cnt, ",", log)
+				fmt.Println(log)
 				atomic.AddInt64(&stdoutLogCount, 1)
 			}
 		}
 	}()
 
-	logChannel2 := make(chan string, 10000)
+	logChannel2 := make(chan string, 10000*thread)
 	processWg.Add(1)
 	go func() {
 		defer processWg.Done()
 		shouldAppendToFile := os.Getenv("SHOULD_APPEND_TO_FILE")
-		cnt := 0
 		for log := range logChannel2 {
 			if shouldAppendToFile == "on" {
-				cnt++
-				appendToFile("output.txt", []byte(fmt.Sprintf("cnt:%d,%s\n", cnt, log)))
+				appendToFile("output.txt", []byte(fmt.Sprintf("%s\n", log)))
 				atomic.AddInt64(&fileLogCount, 1)
 			}
 		}
 	}()
 	printDirectly := os.Getenv("PRINT_DIRECTLY")
 	for j := 0; j < thread; j++ {
-
 		wg.Add(1)
 		go func(threadNo int) {
 			defer wg.Done()
@@ -147,7 +137,7 @@ func echoHandler(thread int, log string, minute int) {
 				default:
 					if printDirectly == "on" {
 						cnt++
-						fmt.Printf("cnt:%d thread:%d,log:%s\n", cnt, threadNo, log)
+						fmt.Printf("%s\n", log)
 					} else {
 						logChannel1 <- fmt.Sprintf("thread:%d,log:%s", threadNo, log)
 						logChannel2 <- fmt.Sprintf("thread:%d,log:%s", threadNo, log)
