@@ -129,14 +129,13 @@ func echoHandler(thread int, log string, minute int) {
 		wg.Add(1)
 		go func(threadNo int) {
 			defer wg.Done()
-			var cnt int64 = 0
 			for {
 				select {
 				case <-quit:
 					return
 				default:
 					if printDirectly == "on" {
-						cnt++
+						atomic.AddInt64(&stdoutLogCount, 1)
 						fmt.Printf("%s\n", log)
 					} else {
 						logChannel1 <- fmt.Sprintf("thread:%d,log:%s", threadNo, log)
@@ -153,8 +152,8 @@ func echoHandler(thread int, log string, minute int) {
 
 	processWg.Wait()
 	atomic.AddInt64(&stdoutLogCount, 2)
-	fmt.Println("cnt:Total stdoutLogCount:", atomic.LoadInt64(&stdoutLogCount))
-	fmt.Println("cnt:Total fileLogCount:", atomic.LoadInt64(&fileLogCount))
+	fmt.Println("Total stdoutLogCount:", atomic.LoadInt64(&stdoutLogCount))
+	fmt.Println("Total fileLogCount:", atomic.LoadInt64(&fileLogCount))
 }
 
 func main() {
