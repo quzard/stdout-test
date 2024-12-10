@@ -4,6 +4,8 @@ import (
 	"fmt"
 	"os"
 	"path/filepath"
+	"runtime"
+	"sort"
 	"strconv"
 	"strings"
 	"sync"
@@ -79,6 +81,28 @@ func appendToFile(filename string, data []byte) {
 	loggerMu.Unlock()
 }
 
+func getlog(level, fileName string, lineNum int, fields map[string]interface{}) string {
+	timestamp := time.Now().Format("2006-01-02 15:04:05.000000")
+	pid := os.Getpid()
+
+	var b strings.Builder
+
+	b.WriteString(fmt.Sprintf("[%s]\t[%s]\t[%d]\t%s:%d",
+		timestamp, level, pid, fileName, lineNum))
+
+	// Write custom fields
+	keys := make([]string, 0, len(fields))
+	for k := range fields {
+		keys = append(keys, k)
+	}
+	sort.Strings(keys) // Sort keys for consistent output
+
+	for _, k := range keys {
+		b.WriteString(fmt.Sprintf("\t%s:%v", k, fields[k]))
+	}
+	return b.String()
+}
+
 func echoHandler(thread int, log string, minute int) {
 	var wg sync.WaitGroup
 	var processWg sync.WaitGroup
@@ -138,10 +162,12 @@ func echoHandler(thread int, log string, minute int) {
 						atomic.AddInt64(&stdoutLogCount, 1)
 						fmt.Printf("%s\n", log)
 					} else {
-						currentTime := time.Now().Format(time.RFC3339Nano)
-						logWithTime := fmt.Sprintf("%s\t%s", currentTime, log)
-						logChannel1 <- logWithTime
-						logChannel2 <- logWithTime
+						_, fileName, lineNum, _ := runtime.Caller(0)
+						printLog := getlog("info", fileName, lineNum, map[string]interface{}{
+							"log": log,
+						})
+						logChannel1 <- printLog
+						logChannel2 <- printLog
 					}
 				}
 			}
