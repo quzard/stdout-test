@@ -8,28 +8,26 @@
 
 ### 先决条件
 
-- Go 1.x
+- Go
 
 ### 环境变量配置
 
 程序通过以下环境变量来控制行为：
 
-#### 日志输出控制
-- `SHOULD_PRINT`: 是否输出到stdout，设置为"on"开启
-- `SHOULD_APPEND_TO_FILE`: 是否输出到文件，设置为"on"开启
-- `PRINT_DIRECTLY`: 是否直接打印而不经过channel，设置为"on"开启
-- `LOG`: 要输出的日志内容
-- `LOG_WRITE_RATE_MB`: 日志写入速率限制(MB/s)，默认500MB/s
+| 环境变量 | 说明 | 默认值 |
+|----------|------|--------|
+| MINUTE | 程序运行时间(分钟),设为-1表示一直运行 | 10 |
+| THREAD | 并发线程数 | 5 |
+| LOG | 日志内容 | - |
+| SHOULD_PRINT | 是否输出到stdout(on/off) | off |
+| SHOULD_APPEND_TO_FILE | 是否写入文件(on/off) | off |
+| PRINT_DIRECTLY | 是否直接打印不带时间戳(on/off) | off |
+| LOG_DIR | 日志文件目录 | /logs |
+| LOG_MAX_SIZE | 单个日志文件最大大小(MB) | 10240 |
+| LOG_MAX_BACKUPS | 日志文件备份数量 | 10 |
+| LOG_MAX_AGE | 日志文件保留天数 | 1 |
+| LOG_WRITE_RATE_MB | 写入速率限制(MB/s) | 500 |
 
-#### 运行参数
-- `MINUTE`: 程序运行时间(分钟)，默认10分钟，设置为-1表示持续运行
-- `THREAD`: 并发线程数，默认5
-
-#### 日志文件配置
-- `LOG_DIR`: 日志文件目录，默认为`/logs`
-- `LOG_MAX_SIZE`: 单个日志文件最大大小(MB)，默认10240MB
-- `LOG_MAX_BACKUPS`: 保留的最大日志文件数，默认10个
-- `LOG_MAX_AGE`: 日志文件保留天数，默认1天
 
 ### 安装
 
@@ -57,11 +55,15 @@ go run server_stdout.go
 
 使用自定义参数运行：
 ```sh
-export SHOULD_PRINT=on
-export SHOULD_APPEND_TO_FILE=on
-export LOG="测试日志"
-export THREAD=10
-export MINUTE=5
+# 设置环境变量
+export MINUTE=10                   # 运行10分钟
+export THREAD=5                    # 使用5个线程
+export LOG="test log"              # 日志内容
+export SHOULD_PRINT=on             # 输出到stdout
+export SHOULD_APPEND_TO_FILE=on    # 写入文件
+export LOG_DIR=/logs               # 日志目录
+export LOG_WRITE_RATE_MB=500       # 写入速率限制(MB/s)
+# 运行程序
 go run server_stdout.go
 ```
 

@@ -138,8 +138,10 @@ func echoHandler(thread int, log string, minute int) {
 						atomic.AddInt64(&stdoutLogCount, 1)
 						fmt.Printf("%s\n", log)
 					} else {
-						logChannel1 <- fmt.Sprintf("thread:%d,log:%s", threadNo, log)
-						logChannel2 <- fmt.Sprintf("thread:%d,log:%s", threadNo, log)
+						currentTime := time.Now().Format(time.RFC3339Nano)
+						logWithTime := fmt.Sprintf("%s\t%s", currentTime, log)
+						logChannel1 <- logWithTime
+						logChannel2 <- logWithTime
 					}
 				}
 			}
